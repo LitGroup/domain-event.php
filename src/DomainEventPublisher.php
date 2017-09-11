@@ -61,6 +61,7 @@ final class DomainEventPublisher
             !is_subclass_of($eventClass, DomainEvent::class, true)) {
             throw new \InvalidArgumentException('Event class must be a subclass of DomainEvent.');
         }
+
         if (!array_key_exists($eventClass, $this->handlers)) {
             $this->handlers[$eventClass] = [];
         }
@@ -77,36 +78,55 @@ final class DomainEventPublisher
      */
     public function publish(DomainEvent $event): void
     {
-        if ($this->publishing) {
+        if ($this->isPublishing()) {
             throw new \RuntimeException('Recursive publishing of domain events is forbidden.');
         }
 
         try {
-            $this->publishing = true;
-
-            if (array_key_exists(get_class($event), $this->handlers)) {
-                foreach ($this->handlers[get_class($event)] as $handler) {
-                    call_user_func($handler, $event);
-                }
+            $this->startPublishing();
+            foreach ($this->getHandlersOf(get_class($event)) as $handler) {
+                call_user_func($handler, $event);
             }
-            if (array_key_exists(DomainEvent::class, $this->handlers)) {
-                foreach ($this->handlers[DomainEvent::class] as $handler) {
-                    call_user_func($handler, $event);
-                }
+            foreach ($this->getHandlersOf(DomainEvent::class) as $handler) {
+                call_user_func($handler, $event);
             }
         } finally {
-            $this->publishing = false;
+            $this->stopPublishing();
         }
     }
 
     public function reset(): void
     {
-        if ($this->publishing) {
+        if ($this->isPublishing()) {
             throw new \RuntimeException(
                 'Resetting of domain event publisher is restricted during a publication of event.');
         }
 
         $this->handlers = [];
+    }
+
+    private function getHandlersOf(string $eventClass): array
+    {
+        if (!array_key_exists($eventClass, $this->handlers)) {
+            return [];
+        }
+
+        return $this->handlers[$eventClass];
+    }
+
+    private function isPublishing(): bool
+    {
+        return $this->publishing;
+    }
+
+    private function startPublishing(): void
+    {
+        $this->publishing = true;
+    }
+
+    private function stopPublishing(): void
+    {
+        $this->publishing = false;
     }
 
     private function __construct() {}
