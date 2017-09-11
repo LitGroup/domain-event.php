@@ -1,0 +1,17 @@
+sudo: false
+language: php
+
+php:
+    - 7.1
+    - nightly
+
+matrix:
+    allow_failures:
+        - php: nightly
+
+install:
+    - composer self-update
+    - composer install
+
+script:
+    - composer test-ci

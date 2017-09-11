@@ -1,0 +1,39 @@
+{
+    "name": "litgroup/domain-event",
+    "description": "Domain Events publication/subscription library for PHP.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Roman Shamritskiy",
+            "email": "roman@litgroup.ru"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "LitGroup\\DomainEvent\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Test\\LitGroup\\DomainEvent\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": [
+            "vendor/bin/phpunit --configuration ."
+        ],
+        "test-coverage-html": [
+            "phpdbg -qrr vendor/bin/phpunit --configuration=. --coverage-html=build/coverage"
+        ],
+        "test-ci": [
+            "phpdbg -qrr vendor/bin/phpunit --configuration=. --colors=never --coverage-text"
+        ]
+    },
+    "require": {
+        "php": "^7.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.3"
+    }
+}
