@@ -34,8 +34,8 @@ final class DomainEventPublisher
     /** @var self */
     private static $instance;
 
-    /** @var array */
-    private $handlers = [];
+    /** @var DomainEventSubscriber[] */
+    private $subscribers = [];
 
     /** @var bool */
     private $publishing = false;
@@ -49,6 +49,18 @@ final class DomainEventPublisher
         return self::$instance;
     }
 
+    public function subscribe(DomainEventSubscriber $subscriber): self
+    {
+        if ($subscriber->getListenedEventClass() !== DomainEvent::class &&
+            !is_subclass_of($subscriber->getListenedEventClass(), DomainEvent::class, true)) {
+            throw new \InvalidArgumentException('Listened event class must be of type DomainEvent.');
+        }
+
+        $this->subscribers[] = $subscriber;
+
+        return $this;
+    }
+
     /**
      * @param string $eventClass Fully-qualified class name of an event.
      * @param callable $handler Function like `function (DomainEvent $event) { ... }`
@@ -57,18 +69,7 @@ final class DomainEventPublisher
      */
     public function listen(string $eventClass, callable $handler): self
     {
-        if ($eventClass !== DomainEvent::class &&
-            !is_subclass_of($eventClass, DomainEvent::class, true)) {
-            throw new \InvalidArgumentException('Event class must be a subclass of DomainEvent.');
-        }
-
-        if (!array_key_exists($eventClass, $this->handlers)) {
-            $this->handlers[$eventClass] = [];
-        }
-
-        $this->handlers[$eventClass][] = $handler;
-
-        return $this;
+        return $this->subscribe(new CallbackSubscriber($eventClass, $handler));
     }
 
     /**
@@ -84,11 +85,13 @@ final class DomainEventPublisher
 
         try {
             $this->startPublishing();
-            foreach ($this->getHandlersOf(get_class($event)) as $handler) {
-                call_user_func($handler, $event);
-            }
-            foreach ($this->getHandlersOf(DomainEvent::class) as $handler) {
-                call_user_func($handler, $event);
+
+            $eventClass = get_class($event);
+            foreach ($this->getSubscribers() as $subscriber) {
+                if ($subscriber->getListenedEventClass() === $eventClass ||
+                    $subscriber->getListenedEventClass() === DomainEvent::class) {
+                    $subscriber->handleEvent($event);
+                }
             }
         } finally {
             $this->stopPublishing();
@@ -99,19 +102,23 @@ final class DomainEventPublisher
     {
         if ($this->isPublishing()) {
             throw new \RuntimeException(
-                'Resetting of domain event publisher is restricted during a publication of event.');
+                'Resetting of domain event publisher is forbidden during a publication of event.');
         }
 
-        $this->handlers = [];
+        $this->unsubscribeAll();
     }
 
-    private function getHandlersOf(string $eventClass): array
+    /**
+     * @return DomainEventSubscriber[]
+     */
+    private function getSubscribers(): array
     {
-        if (!array_key_exists($eventClass, $this->handlers)) {
-            return [];
-        }
+        return $this->subscribers;
+    }
 
-        return $this->handlers[$eventClass];
+    private function unsubscribeAll(): void
+    {
+        $this->subscribers = [];
     }
 
     private function isPublishing(): bool
@@ -133,4 +140,37 @@ final class DomainEventPublisher
     public function __sleep() {}
     public function __wakeup() {}
     public function __clone() {}
+}
+
+/**
+ * @internal
+ */
+class CallbackSubscriber implements DomainEventSubscriber
+{
+    /** @var string */
+    private $eventClass;
+
+    /** @var callable */
+    private $handler;
+
+    public function __construct(string $eventClass, callable $handler)
+    {
+        $this->eventClass = $eventClass;
+        $this->handler = $handler;
+    }
+
+    public function getListenedEventClass(): string
+    {
+        return $this->eventClass;
+    }
+
+    public function handleEvent(DomainEvent $event): void
+    {
+        call_user_func($this->getHandler(), $event);
+    }
+
+    private function getHandler(): callable
+    {
+        return $this->handler;
+    }
 }

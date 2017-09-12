@@ -27,6 +27,7 @@ namespace Test\LitGroup\DomainEvent;
 
 use LitGroup\DomainEvent\DomainEvent;
 use LitGroup\DomainEvent\DomainEventPublisher;
+use LitGroup\DomainEvent\DomainEventSubscriber;
 use PHPUnit\Framework\TestCase;
 
 class DomainEventPublisherTest extends TestCase
@@ -113,7 +114,18 @@ class DomainEventPublisherTest extends TestCase
     function testResetting(): void
     {
         DomainEventPublisher::instance()
-            ->listen(TestEvent::class, function () { throw new \BadMethodCallException('Must not be called'); });
+            ->listen(TestEvent::class, function () { throw new \BadMethodCallException('Must not be called'); })
+            ->subscribe(new class implements DomainEventSubscriber {
+                public function getListenedEventClass(): string
+                {
+                    return TestEvent::class;
+                }
+
+                public function handleEvent(DomainEvent $event): void
+                {
+                    throw new \BadMethodCallException('Must not be called');
+                }
+            });
 
         DomainEventPublisher::instance()->reset();
         DomainEventPublisher::instance()->publish(new TestEvent());
@@ -127,6 +139,83 @@ class DomainEventPublisherTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         DomainEventPublisher::instance()->publish(new TestEvent());
+    }
+
+    function testSubscription(): void
+    {
+        $testEventSubscriber = new TestEventSubscriber();
+        $broadcastSubscriber = new BroadcastSubscriber();
+
+        DomainEventPublisher::instance()
+            ->subscribe($testEventSubscriber)
+            ->subscribe($broadcastSubscriber);
+
+        DomainEventPublisher::instance()->publish(new TestEvent());
+        DomainEventPublisher::instance()->publish(new AnotherTestEvent());
+
+        self::assertCount(1, $testEventSubscriber->getHandledEvents());
+        self::assertCount(2, $broadcastSubscriber->getHandledEvents());
+    }
+
+    function testSubscriptionExceptionForInvalidEventClass(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        DomainEventPublisher::instance()
+            ->subscribe(new class  implements DomainEventSubscriber {
+                public function getListenedEventClass(): string
+                {
+                    return \stdClass::class;
+                }
+
+                public function handleEvent(DomainEvent $event): void
+                {
+                    // Nothing to do.
+                }
+            });
+    }
+}
+
+abstract class FakeSubscriber implements DomainEventSubscriber
+{
+    /** @var DomainEvent[] */
+    private $handledEvents = [];
+
+    public function handleEvent(DomainEvent $event): void
+    {
+        $this->handledEvents[] = $event;
+    }
+
+    /**
+     * @return DomainEvent[]
+     */
+    public function getHandledEvents(): array
+    {
+        return $this->handledEvents;
+    }
+}
+
+class TestEventSubscriber extends FakeSubscriber
+{
+    public function getListenedEventClass(): string
+    {
+        return TestEvent::class;
+    }
+
+    public function handleEvent(DomainEvent $event): void
+    {
+        if (!$event instanceof TestEvent) {
+            throw new \InvalidArgumentException();
+        }
+
+        parent::handleEvent($event);
+    }
+}
+
+class BroadcastSubscriber extends FakeSubscriber
+{
+    public function getListenedEventClass(): string
+    {
+        return DomainEvent::class;
     }
 }
 
