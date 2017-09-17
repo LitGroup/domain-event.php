@@ -175,48 +175,4 @@ class DomainEventPublisherTest extends TestCase
     }
 }
 
-abstract class FakeSubscriber implements DomainEventSubscriber
-{
-    /** @var DomainEvent[] */
-    private $handledEvents = [];
-
-    public function handleEvent(DomainEvent $event): void
-    {
-        $this->handledEvents[] = $event;
-    }
-
-    /**
-     * @return DomainEvent[]
-     */
-    public function getHandledEvents(): array
-    {
-        return $this->handledEvents;
-    }
-}
-
-class TestEventSubscriber extends FakeSubscriber
-{
-    public function getListenedEventClass(): string
-    {
-        return TestEvent::class;
-    }
-
-    public function handleEvent(DomainEvent $event): void
-    {
-        if (!$event instanceof TestEvent) {
-            throw new \InvalidArgumentException();
-        }
-
-        parent::handleEvent($event);
-    }
-}
-
-class BroadcastSubscriber extends FakeSubscriber
-{
-    public function getListenedEventClass(): string
-    {
-        return DomainEvent::class;
-    }
-}
-
 class ExampleException extends \Exception {}
