@@ -10,7 +10,7 @@
 ## Installation
 
 ```bash
-composer require litgroup/domain-event:^0.2
+composer require litgroup/domain-event:^0.3
 ```
 
 ## Example of usage
