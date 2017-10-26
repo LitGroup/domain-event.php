@@ -86,19 +86,31 @@ class DomainEventPublisherTest extends TestCase
         self::assertInstanceOf(AnotherTestEvent::class, $caughtEvents[1]);
     }
 
-    function testRecursivePublishingRestriction(): void
+    function testRecursivePublishing(): void
     {
-        DomainEventPublisher::instance()->listen(DomainEvent::class, function () {
+        /** @var DomainEvent[] $handledEvents */
+        $handledEvents = [];
+
+        DomainEventPublisher::instance()->listen(TestEvent::class, function (TestEvent $event) use (&$handledEvents) {
+            $handledEvents[] = $event;
             DomainEventPublisher::instance()->publish(new AnotherTestEvent());
         });
 
-        $this->expectException(\RuntimeException::class);
+        DomainEventPublisher::instance()->listen(AnotherTestEvent::class, function (AnotherTestEvent $event) use (&$handledEvents) {
+            $handledEvents[] = $event;
+        });
+
         DomainEventPublisher::instance()->publish(new TestEvent());
+        self::assertCount(2, $handledEvents);
     }
 
     function testExceptionRethrowingDuringPublishing(): void
     {
         DomainEventPublisher::instance()->listen(TestEvent::class, function () {
+            DomainEventPublisher::instance()->publish(new AnotherTestEvent());
+        });
+
+        DomainEventPublisher::instance()->listen(AnotherTestEvent::class, function () {
             throw new ExampleException();
         });
 
@@ -107,8 +119,9 @@ class DomainEventPublisherTest extends TestCase
             $this->fail();
         } catch (ExampleException $e) {}
 
-        // Check that DomainEventPublisher state was nat destructed by exception.
-        DomainEventPublisher::instance()->publish(new AnotherTestEvent());
+        // Check that DomainEventPublisher state was not corrupted by exception
+        // (internal publishing counter must be reset to 0).
+        DomainEventPublisher::instance()->reset();
     }
 
     function testResetting(): void

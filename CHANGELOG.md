@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - `ChainSubscriber`.
 
+### Changed
+- Recursive event publishing was allowed.
+
 ## 0.2.0 - 2017-09-12
 ### Added
 - `DomainEventSubscriber` interface.

@@ -37,8 +37,8 @@ final class DomainEventPublisher
     /** @var DomainEventSubscriber[] */
     private $subscribers = [];
 
-    /** @var bool */
-    private $publishing = false;
+    /** @var int */
+    private $publishingCounter = 0;
 
     public static function instance(): self
     {
@@ -69,7 +69,7 @@ final class DomainEventPublisher
      */
     public function listen(string $eventClass, callable $handler): self
     {
-        return $this->subscribe(new CallbackSubscriber($eventClass, $handler));
+        return $this->subscribe($this->createCallbackSubscriber($eventClass, $handler));
     }
 
     /**
@@ -79,12 +79,8 @@ final class DomainEventPublisher
      */
     public function publish(DomainEvent $event): void
     {
-        if ($this->isPublishing()) {
-            throw new \RuntimeException('Recursive publishing of domain events is forbidden.');
-        }
-
         try {
-            $this->startPublishing();
+            $this->incrementPublishingCounter();
 
             $eventClass = get_class($event);
             foreach ($this->getSubscribers() as $subscriber) {
@@ -94,7 +90,7 @@ final class DomainEventPublisher
                 }
             }
         } finally {
-            $this->stopPublishing();
+            $this->decrementPublishingCounter();
         }
     }
 
@@ -123,54 +119,53 @@ final class DomainEventPublisher
 
     private function isPublishing(): bool
     {
-        return $this->publishing;
+        return $this->publishingCounter > 0;
     }
 
-    private function startPublishing(): void
+    private function incrementPublishingCounter(): void
     {
-        $this->publishing = true;
+        $this->publishingCounter++;
     }
 
-    private function stopPublishing(): void
+    private function decrementPublishingCounter(): void
     {
-        $this->publishing = false;
+        $this->publishingCounter = $this->publishingCounter > 0 ? $this->publishingCounter - 1 : 0;
+    }
+
+    private function createCallbackSubscriber(string $eventClass, callable $handler): DomainEventSubscriber
+    {
+        return new class($eventClass, $handler) implements DomainEventSubscriber {
+            /** @var string */
+            private $eventClass;
+
+            /** @var callable */
+            private $handler;
+
+            public function __construct(string $eventClass, callable $handler)
+            {
+                $this->eventClass = $eventClass;
+                $this->handler = $handler;
+            }
+
+            public function getListenedEventClass(): string
+            {
+                return $this->eventClass;
+            }
+
+            public function handleEvent(DomainEvent $event): void
+            {
+                call_user_func($this->getHandler(), $event);
+            }
+
+            private function getHandler(): callable
+            {
+                return $this->handler;
+            }
+        };
     }
 
     private function __construct() {}
     public function __sleep() {}
     public function __wakeup() {}
     public function __clone() {}
-}
-
-/**
- * @internal
- */
-class CallbackSubscriber implements DomainEventSubscriber
-{
-    /** @var string */
-    private $eventClass;
-
-    /** @var callable */
-    private $handler;
-
-    public function __construct(string $eventClass, callable $handler)
-    {
-        $this->eventClass = $eventClass;
-        $this->handler = $handler;
-    }
-
-    public function getListenedEventClass(): string
-    {
-        return $this->eventClass;
-    }
-
-    public function handleEvent(DomainEvent $event): void
-    {
-        call_user_func($this->getHandler(), $event);
-    }
-
-    private function getHandler(): callable
-    {
-        return $this->handler;
-    }
 }
